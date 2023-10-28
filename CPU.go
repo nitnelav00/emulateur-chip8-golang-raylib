@@ -19,6 +19,7 @@ type CPU struct {
 	registres   [16]uint8
 	speed       int
 	pause       bool
+	key_reg     uint16
 	render      *Render
 }
 
@@ -97,6 +98,11 @@ func (c *CPU) Cycle() {
 	if !c.pause {
 		c.update_timers()
 	}
+
+	if c.pause && rl.GetKeyPressed() != 0 {
+		c.registres[c.key_reg] = translate_keys_rev(rl.GetKeyPressed())
+		c.pause = false
+	}
 }
 
 func (c *CPU) update_timers() {
@@ -151,38 +157,45 @@ func (c *CPU) execute(opcode uint16) {
 		case 0x0:
 			c.registres[x] = c.registres[y]
 		case 0x1:
+			// c.registres[0xF] = 0
 			c.registres[x] |= c.registres[y]
 		case 0x2:
+			// c.registres[0xF] = 0
 			c.registres[x] &= c.registres[y]
 		case 0x3:
+			// c.registres[0xF] = 0
 			c.registres[x] ^= c.registres[y]
 		case 0x4:
-			var sum uint16 = uint16(c.registres[x] + c.registres[y])
+			var sum uint16 = uint16(c.registres[x]) + uint16(c.registres[y])
 			c.registres[x] = uint8(sum & 0xFF)
 			c.registres[0xF] = 0
 			if sum > 0xFF {
 				c.registres[0xF] = 1
 			}
 		case 0x5:
-			var sub int16 = int16(c.registres[x] - c.registres[y])
-			c.registres[x] = uint8(sub & 0xFF)
+			var under bool = c.registres[x] > c.registres[y]
+			c.registres[x] = c.registres[x] - c.registres[y]
 			c.registres[0xF] = 0
-			if sub < 0 {
+			if under {
 				c.registres[0xF] = 1
 			}
 		case 0x6:
-			c.registres[0xF] = c.registres[x] & 1
+			c.registres[x] = c.registres[y]
+			tmp := c.registres[x] & 1
 			c.registres[x] >>= 1
+			c.registres[0xF] = tmp
 		case 0x7:
-			var sub int16 = int16(c.registres[y] - c.registres[x])
-			c.registres[y] = uint8(sub & 0xFF)
+			var under bool = c.registres[y] > c.registres[x]
+			c.registres[x] = c.registres[y] - c.registres[x]
 			c.registres[0xF] = 0
-			if sub < 0 {
+			if under {
 				c.registres[0xF] = 1
 			}
 		case 0xE:
-			c.registres[0xF] = c.registres[x] >> 7
+			c.registres[x] = c.registres[y]
+			tmp := c.registres[x] >> 7
 			c.registres[x] <<= 1
+			c.registres[0xF] = tmp
 		}
 	case 0x9000:
 		if c.registres[x] != c.registres[y] {
@@ -205,11 +218,9 @@ func (c *CPU) execute(opcode uint16) {
 				if (sprite & 0x80) > 0 {
 					xpos := c.registres[x] + uint8(col)
 					ypos := c.registres[y] + uint8(row)
-					if xpos >= 0 && xpos < SCREEN_SIZE_X && ypos >= 0 && ypos < SCREEN_SIZE_Y {
-						pixel_res := c.render.Set_pixel(xpos, ypos)
-						if pixel_res {
-							c.registres[0xF] = 1
-						}
+					pixel_res := c.render.Set_pixel(xpos%SCREEN_SIZE_X, ypos%SCREEN_SIZE_Y)
+					if pixel_res {
+						c.registres[0xF] = 1
 					}
 				}
 				sprite <<= 1
@@ -233,6 +244,8 @@ func (c *CPU) execute(opcode uint16) {
 		case 0x07:
 			c.registres[x] = c.delay_timer
 		case 0x0A:
+			c.pause = true
+			c.key_reg = x
 		case 0x15:
 			c.delay_timer = c.registres[x]
 		case 0x18:
@@ -249,10 +262,12 @@ func (c *CPU) execute(opcode uint16) {
 			for index := 0; index <= int(x); index++ {
 				c.memory[int(c.i)+index] = c.registres[index]
 			}
+			c.i += 1
 		case 0x65:
 			for index := 0; index <= int(x); index++ {
 				c.registres[index] = c.memory[int(c.i)+index]
 			}
+			c.i += 1
 		}
 	}
 }
@@ -291,6 +306,44 @@ func translatekey(key uint8) int32 {
 		return rl.KeyC
 	case 0xF:
 		return rl.KeyV
+	}
+	return 0
+}
+
+func translate_keys_rev(key int32) uint8 {
+	switch key {
+	case rl.KeyOne:
+		return 0x1
+	case rl.KeyTwo:
+		return 0x2
+	case rl.KeyThree:
+		return 0x3
+	case rl.KeyFour:
+		return 0xC
+	case rl.KeyQ:
+		return 0x4
+	case rl.KeyW:
+		return 0x5
+	case rl.KeyE:
+		return 0x6
+	case rl.KeyR:
+		return 0xD
+	case rl.KeyA:
+		return 0x7
+	case rl.KeyS:
+		return 0x8
+	case rl.KeyD:
+		return 0x9
+	case rl.KeyF:
+		return 0xE
+	case rl.KeyZ:
+		return 0xA
+	case rl.KeyX:
+		return 0x0
+	case rl.KeyC:
+		return 0xB
+	case rl.KeyV:
+		return 0xF
 	}
 	return 0
 }
