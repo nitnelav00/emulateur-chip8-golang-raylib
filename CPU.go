@@ -116,11 +116,14 @@ func (c *CPU) update_timers() {
 
 func (c *CPU) execute(opcode uint16) {
 	c.pc += 2
+	c.pc %= 4096
 	x := (opcode & 0x0F00) >> 8
 	y := (opcode & 0x00F0) >> 4
 	var kk uint8 = uint8(opcode & 0x00FF)
 	n := opcode & 0x000F
 	nnn := opcode & 0x0FFF
+
+	// fmt.Printf("%04X ", opcode)
 
 	switch opcode & 0xF000 {
 	case 0x0000:
@@ -157,13 +160,10 @@ func (c *CPU) execute(opcode uint16) {
 		case 0x0:
 			c.registres[x] = c.registres[y]
 		case 0x1:
-			// c.registres[0xF] = 0
 			c.registres[x] |= c.registres[y]
 		case 0x2:
-			// c.registres[0xF] = 0
 			c.registres[x] &= c.registres[y]
 		case 0x3:
-			// c.registres[0xF] = 0
 			c.registres[x] ^= c.registres[y]
 		case 0x4:
 			var sum uint16 = uint16(c.registres[x]) + uint16(c.registres[y])
